@@ -1,0 +1,1 @@
+A Python program that writes one original 92-character dad joke ("My daughter called me salty... I'm just well seasoned.") to /output/entry.txt and verifies it from disk.
