@@ -1,122 +1,58 @@
-#!/usr/bin/env python3
-"""Dad Joke Showdown entry.
+"""Dad Joke Showdown entry — one original dad joke.
 
-Writes one original dad joke to /output/entry.txt, then reads the file
-back and verifies it a second time from disk. The joke is a single line
-of plain ASCII, at most 200 characters, with the punchline as the last
-word:
+The joke is a kitchen-table one-liner told by a dad to his daughter:
+she calls him salty, and he answers with a seasoning pun, landing on
+"seasoned." as the punchline. It is written plain to /output/entry.txt
+with a single direct open() call — no temp file, no rename — because
+the grading sandbox could not create a temp file in /output.
 
-    My daughter called me salty. I said, 'Sweetheart, after three kids,
-    I'm just well seasoned.'
+Joke (92 characters, one line, plain ASCII, no trailing newline):
 
-The pun chain is salty -> seasoned: the daughter's insult is answered
-with the cooking word that owns it. It is written to be told out loud
-by a father at the table, needs no explaining, and every word earns
-its place.
-
-Usage:
-    python3 main.py            write /output/entry.txt and verify it
-    python3 main.py --check    only verify the file already on disk
+    My daughter called me salty. I said, 'Sweetheart, after three kids, I'm just well seasoned.'
 """
 
 import os
 import sys
-import tempfile
-
-JOKE = (
-    "My daughter called me salty. "
-    "I said, 'Sweetheart, after three kids, I'm just well seasoned.'"
-)
 
 OUTPUT_PATH = "/output/entry.txt"
-MAX_CHARS = 200
-PUNCHLINE = "seasoned.'"
+
+JOKE = "My daughter called me salty. I said, 'Sweetheart, after three kids, I'm just well seasoned.'"
 
 
-def check_text(text, where):
-    """First-pass checks on a joke string, before it touches disk."""
-    problems = []
-    if not text or not text.strip():
-        problems.append("%s: entry is empty or whitespace only" % where)
-    if "\n" in text or "\r" in text:
-        problems.append("%s: entry must be exactly one line" % where)
-    if len(text) > MAX_CHARS:
-        problems.append(
-            "%s: entry is %d characters, over the %d limit"
-            % (where, len(text), MAX_CHARS)
-        )
-    try:
-        text.encode("ascii")
-    except UnicodeEncodeError:
-        problems.append("%s: entry must be plain ASCII" % where)
-    if not text.rstrip().endswith(PUNCHLINE):
-        problems.append("%s: punchline must be the last word" % where)
-    return problems
+def verify_entry() -> int:
+    """Read /output/entry.txt back from disk and verify it byte-for-byte."""
+    with open(OUTPUT_PATH, "rb") as f:
+        raw = f.read()
+    text = raw.decode("ascii")
+    assert text == JOKE, "entry.txt does not match the joke"
+    assert len(text) == 92, f"expected 92 chars, got {len(text)}"
+    assert text.count("\n") == 0, "entry must be exactly one line"
+    assert text.endswith("seasoned.'"), "punchline must end on seasoned.'"
+    assert len(raw) == 92, f"expected 92 bytes, got {len(raw)}"
+    return len(raw)
 
 
-def check_file(path):
-    """Second-pass checks: read the written file back and re-assert
-    everything from disk, so a bad write can never pass silently."""
-    problems = []
-    try:
-        with open(path, "rb") as handle:
-            raw = handle.read()
-    except OSError as exc:
-        return ["cannot read %s: %s" % (path, exc)]
-    try:
-        text = raw.decode("ascii")
-    except UnicodeDecodeError:
-        return ["%s: file is not plain ASCII" % path]
-    if text != JOKE:
-        problems.append("%s: file contents differ from the joke" % path)
-    if raw.endswith(b"\n"):
-        problems.append("%s: file must not end with a trailing newline" % path)
-    if len(raw) != len(JOKE):
-        problems.append(
-            "%s: file is %d bytes, expected %d" % (path, len(raw), len(JOKE))
-        )
-    problems.extend(check_text(text, path))
-    return problems
+def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == ["--check"]:
+        # Verify the file already on disk without rewriting it.
+        size = verify_entry()
+        print(f"OK: {OUTPUT_PATH} is {size} bytes, matches the joke")
+        return 0
+    if argv:
+        print(f"usage: {sys.argv[0]} [--check]", file=sys.stderr)
+        return 2
 
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
-def write_entry():
-    """Write atomically: temp file in the same directory, then rename,
-    so the gate never sees a half-written entry."""
-    directory = os.path.dirname(OUTPUT_PATH)
-    os.makedirs(directory, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".entry-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="ascii") as handle:
-            handle.write(JOKE)
-        os.replace(tmp_path, OUTPUT_PATH)
-    except BaseException:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    # Direct write: open the destination itself, no temp file, no rename.
+    with open(OUTPUT_PATH, "w", encoding="ascii", newline="") as f:
+        f.write(JOKE)
 
-
-def main(argv):
-    check_only = "--check" in argv
-    if not check_only:
-        problems = check_text(JOKE, "joke")
-        if problems:
-            for problem in problems:
-                print("FAIL: " + problem, file=sys.stderr)
-            return 1
-        write_entry()
-    problems = check_file(OUTPUT_PATH)
-    if problems:
-        for problem in problems:
-            print("FAIL: " + problem, file=sys.stderr)
-        return 1
-    print(
-        "OK: %s holds exactly 1 line, %d characters, ASCII, "
-        "punchline at the end" % (OUTPUT_PATH, len(JOKE))
-    )
+    size = verify_entry()
+    print(f"Wrote {size} bytes to {OUTPUT_PATH}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())
